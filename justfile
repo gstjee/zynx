@@ -11,24 +11,20 @@ LLVM_BIN := ONDK_PATH / "toolchains/llvm/prebuilt" / HOST_TAG / "bin"
 
 export CC := LLVM_BIN / ("aarch64-linux-android" + TARGET_SDK + "-clang")
 
-build-debug features="": setup-ondk
+build variant="debug" features="": setup-ondk
+    {{ if variant == "release" { "PROFILE=release" } else { "" } }} \
     cargo build \
         -Z build-std \
         --target aarch64-linux-android \
         --config target.aarch64-linux-android.linker=\"{{CC}}\" \
+        {{ if variant == "release" { "--release" } else { "" } }} \
         {{ if features == "no-zygisk" { "--no-default-features" } else { "" } }}
 
-build-release features="": setup-ondk
-    PROFILE=release cargo build \
-        -Z build-std \
-        --target aarch64-linux-android \
-        --config target.aarch64-linux-android.linker=\"{{CC}}\" \
-        --release \
-        {{ if features == "no-zygisk" { "--no-default-features" } else { "" } }}
-
-run-emulator: build-debug
-    adb push target/aarch64-linux-android/debug/zynx /data/local/tmp/zynx
+deploy variant="debug": (build variant)
+    adb push target/aarch64-linux-android/{{variant}}/zynx /data/local/tmp/zynx
     adb shell "chmod +x /data/local/tmp/zynx"
+
+run-emulator variant="debug": (deploy variant)
     adb shell "(su 0 killall zynx || true) && sleep 1"
     adb shell su 0 setenforce 0
     adb shell "RUST_LOG=debug RUST_LOG_STYLE=always RUST_BACKTRACE=1 su 0 /data/local/tmp/zynx --cfg-enable-zygisk --cfg-enable-debugger --cfg-enable-liteloader"

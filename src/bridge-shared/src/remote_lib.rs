@@ -7,7 +7,7 @@ use nix::libc;
 use nix::libc::{MAP_FAILED, MAP_PRIVATE, PROT_READ, RTLD_NOW, c_int, off64_t, size_t};
 use std::ffi::{CStr, CString, c_void};
 use std::fs::File;
-use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::ptr;
 
 mod system {

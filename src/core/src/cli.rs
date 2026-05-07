@@ -1,21 +1,39 @@
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(about = "Zynx - an eBPF-based Android process injection framework", version, long_version = concat!(env!("CARGO_PKG_VERSION"), " (commit ", env!("GIT_COMMIT_HASH"), ")"))]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+
+    #[command(flatten)]
+    pub configs: CfgOptions,
+}
+
+#[derive(Subcommand)]
+pub enum Command {
+    /// Run as daemon (for KernelSU/Magisk module)
+    Daemon,
+    /// Attach to a running zygote process
+    AttachZygote {
+        /// PID of the zygote64 process
+        pid: i32,
+    },
+}
+
+#[derive(Args, Clone)]
+pub struct CfgOptions {
     #[clap(
         long,
-        help = "Run Zynx in daemon mode (usually used for KernelSU/Magisk module)"
+        global = true,
+        help = "Enable debugger (allow force-debuggable for apps)"
     )]
-    pub daemon: bool,
-
-    #[clap(long, help = "Enable debugger (allow force-debuggable for apps)")]
     pub cfg_enable_debugger: bool,
 
-    #[clap(long, help = "Enable zygisk compat")]
+    #[clap(long, global = true, help = "Enable zygisk compat")]
     pub cfg_enable_zygisk: bool,
 
-    #[clap(long, help = "Enable liteloader")]
+    #[clap(long, global = true, help = "Enable liteloader")]
     pub cfg_enable_liteloader: bool,
 }
 

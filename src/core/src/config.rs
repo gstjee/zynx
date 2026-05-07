@@ -1,4 +1,4 @@
-use crate::cli::Cli;
+use crate::cli::CfgOptions;
 use anyhow::{Result, anyhow};
 use std::sync::OnceLock;
 
@@ -12,11 +12,15 @@ pub struct ZynxConfigs {
 }
 
 impl ZynxConfigs {
-    pub fn init(cli: &Cli) -> Result<()> {
-        let config = Self::from_cli(cli);
+    pub fn init(config: &CfgOptions) -> Result<()> {
+        let instance = Self {
+            enable_debugger: config.cfg_enable_debugger,
+            enable_zygisk: config.cfg_enable_zygisk,
+            enable_liteloader: config.cfg_enable_liteloader,
+        };
 
         INSTANCE
-            .set(config)
+            .set(instance)
             .map_err(|_| anyhow!("duplicate called"))?;
 
         Ok(())
@@ -24,13 +28,5 @@ impl ZynxConfigs {
 
     pub fn instance() -> &'static Self {
         INSTANCE.get().expect("configs not initialized")
-    }
-
-    fn from_cli(cli: &Cli) -> Self {
-        Self {
-            enable_debugger: cli.cfg_enable_debugger,
-            enable_zygisk: cli.cfg_enable_zygisk,
-            enable_liteloader: cli.cfg_enable_liteloader,
-        }
     }
 }

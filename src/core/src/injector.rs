@@ -7,7 +7,7 @@ use app::zygote::ZYGOTE_NAME;
 use app::zygote::ZygoteTracer;
 use log::{error, info};
 use nix::unistd;
-use nix::unistd::SysconfVar;
+use nix::unistd::{Pid, SysconfVar};
 use once_cell::sync::Lazy;
 use procfs::process::Process;
 
@@ -47,7 +47,7 @@ fn handle_event(event: &Message) -> Result<()> {
     }
 }
 
-pub async fn serve() -> Result<()> {
+pub async fn run() -> Result<()> {
     let config = monitor::Config {
         target_paths: vec![],
         target_names: vec![ZYGOTE_NAME.into()],
@@ -63,6 +63,46 @@ pub async fn serve() -> Result<()> {
     while let Some(event) = monitor.recv_msg().await {
         if let Err(err) = handle_event(&event) {
             error!("error while handling event {event:?}: {err:?}");
+        }
+    }
+
+    bail!("monitor exited unexpectedly");
+}
+
+pub async fn attach_zygote(pid: i32) -> Result<()> {
+    let pid = Pid::from_raw(pid);
+
+    // verify that the process is actually zygote64
+    let proc = Process::new(pid.as_raw())?;
+    let cmdline = proc.cmdline()?;
+    if !cmdline.iter().any(|arg| arg == ZYGOTE_NAME) {
+        bail!("process {pid} is not zygote64 (cmdline = {cmdline:?})");
+    }
+
+    let config = monitor::Config {
+        target_paths: vec![],
+        target_names: vec![ZYGOTE_NAME.into()],
+    };
+
+    PackageInfoService::init()?;
+    PolicyProviderManager::init().await?;
+    Monitor::init(config)?;
+
+    ZygoteTracer::create_attach(pid)?;
+
+    let monitor = Monitor::instance();
+
+    while let Some(event) = monitor.recv_msg().await {
+        match &event {
+            Message::ZygoteCrashed(_) => {
+                info!("zygote process exited, shutting down");
+                return Ok(());
+            }
+            _ => {
+                if let Err(err) = handle_event(&event) {
+                    error!("error while handling event {event:?}: {err:?}");
+                }
+            }
         }
     }
 

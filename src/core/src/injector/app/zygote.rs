@@ -115,6 +115,47 @@ impl ZygoteTracer {
         Ok(())
     }
 
+    pub fn create_attach(pid: Pid) -> Result<()> {
+        info!("attaching to running zygote process: {pid}");
+
+        // stop zygote to prevent state changes during maps parsing
+        signal::kill(pid, Signal::SIGSTOP)?;
+
+        defer! {
+            signal::kill(pid, Signal::SIGCONT).log_if_error()
+        }
+
+        Monitor::instance().attach_zygote(pid.as_raw())?;
+
+        let maps = ZygoteMaps::parse(pid)?;
+        let library_base = maps
+            .find_library_base(SC_CONFIG.lib)
+            .context("SpecializeCommon: failed to find libandroid_runtime.so base address")?;
+
+        let sc_addr = library_base + SC_CONFIG.sym.addr;
+        let Some(sc_vma) = maps.find_vma(sc_addr) else {
+            bail!("SpecializeCommon: memory region not found")
+        };
+
+        if (sc_vma.perms & MMPermissions::EXECUTE) == MMPermissions::empty() {
+            bail!("SpecializeCommon: memory region is not executable")
+        }
+
+        if !matches!(sc_vma.pathname, MMapPath::Path(_)) {
+            bail!("SpecializeCommon: memory region is not mapped from file")
+        }
+
+        info!("SpecializeCommon vma: {sc_vma:?}, addr: {sc_addr}");
+
+        let mut tracer = ZYGOTE_TRACER.write();
+        tracer.replace(Self {
+            specialize_fn: sc_addr,
+            maps,
+        });
+
+        Ok(())
+    }
+
     pub fn reset() -> Result<()> {
         ZYGOTE_TRACER.write().take();
         Ok(())

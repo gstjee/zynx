@@ -59,7 +59,7 @@ strip = true
 split-debuginfo = "packed"
 debug = "line-tables-only"
 
-[profile.release.package.zynx-core]
+[profile.release.package.zynx]
 codegen-units = 1
 
 [profile.release.package.zynx-bridge]

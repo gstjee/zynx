@@ -7,7 +7,7 @@ mod injector;
 mod misc;
 mod monitor;
 
-use crate::cli::Cli;
+use crate::cli::{Cli, Command};
 use crate::config::ZynxConfigs;
 use crate::misc::inject_panic_handler;
 use anyhow::Result;
@@ -34,26 +34,34 @@ fn init_logger() {
 fn main() -> Result<()> {
     init_logger();
 
-    let args = Cli::parse_args();
+    let cli = Cli::parse_args();
 
-    if args.daemon {
-        daemon::launch_daemon()?;
-        return Ok(());
+    match cli.command {
+        Some(Command::Daemon) => {
+            daemon::launch_daemon()?;
+        }
+        Some(Command::AttachZygote { pid }) => {
+            ZynxConfigs::init(&cli.configs)?;
+            Builder::new_multi_thread()
+                .enable_all()
+                .build()?
+                .block_on(async {
+                    inject_panic_handler();
+                    injector::attach_zygote(pid).await
+                })?;
+        }
+        None => {
+            ZynxConfigs::init(&cli.configs)?;
+            daemon::daemonize_if_needed()?;
+            Builder::new_multi_thread()
+                .enable_all()
+                .build()?
+                .block_on(async {
+                    inject_panic_handler();
+                    injector::run().await
+                })?;
+        }
     }
 
-    ZynxConfigs::init(&args)?;
-    daemon::daemonize_if_needed()?;
-
-    Builder::new_multi_thread()
-        .enable_all()
-        .build()?
-        .block_on(async_main())?;
-
-    Ok(())
-}
-
-async fn async_main() -> Result<()> {
-    inject_panic_handler();
-    injector::serve().await?;
     Ok(())
 }
